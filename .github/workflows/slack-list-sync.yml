@@ -1,0 +1,117 @@
+name: Slack List Sync
+
+on:
+  pull_request:
+    types: [closed]
+
+env:
+  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+  SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
+
+jobs:
+  update-slack-list:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract Issue Number
+        id: extract
+        run: |
+          # PR 제목 또는 브랜치명에서 #123 형식의 Issue 번호 추출
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          BRANCH_NAME="${{ github.head_ref }}"
+
+          # PR 제목에서 먼저 시도
+          ISSUE_NUM=$(echo "$PR_TITLE" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
+
+          # 없으면 브랜치명에서 시도
+          if [ -z "$ISSUE_NUM" ]; then
+            ISSUE_NUM=$(echo "$BRANCH_NAME" | grep -oE '[0-9]+' | head -1)
+          fi
+
+          echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "Extracted Issue Number: $ISSUE_NUM"
+
+      - name: Get Slack List Item ID
+        id: get_item
+        if: steps.extract.outputs.issue_number != ''
+        run: |
+          # Slack List에서 해당 Issue 번호를 가진 항목 검색
+          RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"list_id\": \"$SLACK_LIST_ID\"}")
+
+          # Issue 번호로 항목 ID 찾기
+          ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
+          ITEM_ID=$(echo "$RESPONSE" | jq -r ".items[] | select(.fields[] | select(.text[]?.text? | contains(\"#$ISSUE_NUM\"))) | .id" | head -1)
+
+          echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
+          echo "Found Item ID: $ITEM_ID"
+
+      - name: Update Slack List Item
+        if: steps.get_item.outputs.item_id != ''
+        run: |
+          ITEM_ID="${{ steps.get_item.outputs.item_id }}"
+          PR_TITLE="${{ steps.extract.outputs.pr_title }}"
+
+          # 진행률 100%로 업데이트 + PR 제목 비고에 저장
+          curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"list_id\": \"$SLACK_LIST_ID\",
+              \"item_id\": \"$ITEM_ID\",
+              \"fields\": [
+                {
+                  \"column_id\": \"progress\",
+                  \"number\": [100]
+                },
+                {
+                  \"column_id\": \"remarks\",
+                  \"rich_text\": [{
+                    \"type\": \"rich_text\",
+                    \"elements\": [{
+                      \"type\": \"rich_text_section\",
+                      \"elements\": [{
+                        \"type\": \"text\",
+                        \"text\": \"$PR_TITLE\"
+                      }]
+                    }]
+                  }]
+                }
+              ]
+            }"
+
+          echo "Updated Slack List item: $ITEM_ID"
+
+      - name: Send Failure Alert
+        if: steps.extract.outputs.issue_number == '' || steps.get_item.outputs.item_id == ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
+
+          if [ -z "$ISSUE_NUM" ]; then
+            MESSAGE="PR 제목에서 Issue 번호(#123)를 찾을 수 없습니다"
+          else
+            MESSAGE="Slack List에서 #$ISSUE_NUM 항목을 찾을 수 없습니다"
+          fi
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"GitHub-Slack Sync 실패\",
+              \"blocks\": [
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"*GitHub-Slack Sync 실패*\n$MESSAGE\n\n*PR:* <$PR_URL|$PR_TITLE>\"
+                  }
+                }
+              ]
+            }"
