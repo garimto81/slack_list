@@ -31,31 +31,21 @@ jobs:
 
           echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
           echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
-          echo "Extracted Issue Number: $ISSUE_NUM"
 
       - name: Get Slack List Item ID
         id: get_item
         if: steps.extract.outputs.issue_number != ''
         run: |
-          # 디버그: 환경 변수 확인
-          echo "Token length: ${#SLACK_USER_TOKEN}"
-          echo "List ID: $SLACK_LIST_ID"
+          RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
+            -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "list_id=$SLACK_LIST_ID")
 
-          # Slack List에서 해당 Issue 번호를 가진 항목 검색
-          RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" -H "Authorization: Bearer $SLACK_USER_TOKEN" -H "Content-Type: application/x-www-form-urlencoded" -d "list_id=$SLACK_LIST_ID")
-
-          # 디버그: 전체 API 응답 출력
-          echo "Full Response: $RESPONSE"
-          echo "API Response OK: $(echo "$RESPONSE" | jq -r '.ok')"
-          echo "API Error: $(echo "$RESPONSE" | jq -r '.error // empty')"
-          echo "Items count: $(echo "$RESPONSE" | jq -r '.items | length // 0')"
-
-          # Issue 번호로 항목 ID 찾기
           ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
-          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg num "#$ISSUE_NUM" '.items[] | select(.fields[] | .text? == $num) | .id' | head -1)
+          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg num "#$ISSUE_NUM" \
+            '.items[] | select(.fields[] | .text? == $num) | .id' | head -1)
 
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
-          echo "Found Item ID: $ITEM_ID"
 
       - name: Update Slack List Item
         if: steps.get_item.outputs.item_id != ''
@@ -91,8 +81,6 @@ jobs:
                 }
               ]
             }"
-
-          echo "Updated Slack List item: $ITEM_ID"
 
       - name: Send Failure Alert
         if: steps.extract.outputs.issue_number == '' || steps.get_item.outputs.item_id == ''
