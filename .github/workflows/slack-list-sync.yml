@@ -42,10 +42,13 @@ jobs:
           echo "List ID: $SLACK_LIST_ID"
 
           # Slack List에서 해당 Issue 번호를 가진 항목 검색
+          JSON_BODY="{\"list_id\": \"$SLACK_LIST_ID\"}"
+          echo "JSON Body: $JSON_BODY"
+
           RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"list_id\": \"$SLACK_LIST_ID\"}")
+            -d "$JSON_BODY")
 
           # 디버그: 전체 API 응답 출력
           echo "Full Response: $RESPONSE"
