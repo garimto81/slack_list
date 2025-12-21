@@ -45,7 +45,8 @@ jobs:
 
           # 디버그: API 응답 확인
           echo "API Response OK: $(echo "$RESPONSE" | jq -r '.ok')"
-          echo "Items count: $(echo "$RESPONSE" | jq -r '.items | length')"
+          echo "API Error: $(echo "$RESPONSE" | jq -r '.error // empty')"
+          echo "Items count: $(echo "$RESPONSE" | jq -r '.items | length // 0')"
 
           # Issue 번호로 항목 ID 찾기
           ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
