@@ -115,3 +115,4 @@ fix/456-session-bug
 ## 라이선스
 
 MIT
+# 한글 테스트 Sun, Dec 21, 2025  5:20:40 PM
