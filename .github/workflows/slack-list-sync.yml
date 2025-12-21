@@ -83,6 +83,33 @@ jobs:
 
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
 
+      - name: Create Slack List Item (if not exists)
+        id: create_item
+        if: steps.extract.outputs.issue_number != '' && steps.get_item.outputs.item_id == ''
+        run: |
+          ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
+          PR_TITLE="${{ steps.extract.outputs.pr_title }}"
+
+          # 새 항목 생성
+          RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.create" \
+            -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "{
+              \"list_id\": \"$SLACK_LIST_ID\",
+              \"item\": {
+                \"fields\": {
+                  \"title\": \"#$ISSUE_NUM - $PR_TITLE\"
+                }
+              }
+            }")
+
+          echo "API Response: $RESPONSE"
+
+          # 생성된 항목 ID 추출
+          NEW_ITEM_ID=$(echo "$RESPONSE" | jq -r '.item.id // empty')
+          echo "item_id=$NEW_ITEM_ID" >> $GITHUB_OUTPUT
+          echo "Created new item: $NEW_ITEM_ID"
+
       - name: Build Progress Bar
         id: progress_bar
         run: |
@@ -134,9 +161,13 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Update Slack List Item
-        if: steps.get_item.outputs.item_id != ''
+        if: steps.get_item.outputs.item_id != '' || steps.create_item.outputs.item_id != ''
         run: |
+          # 기존 항목 또는 새로 생성된 항목 ID 사용
           ITEM_ID="${{ steps.get_item.outputs.item_id }}"
+          if [ -z "$ITEM_ID" ]; then
+            ITEM_ID="${{ steps.create_item.outputs.item_id }}"
+          fi
           PROGRESS="${{ steps.extract.outputs.progress }}"
 
           # 비고 필드 내용 구성
