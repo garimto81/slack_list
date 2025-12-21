@@ -45,7 +45,7 @@ jobs:
 
           # Issue 번호로 항목 ID 찾기
           ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
-          ITEM_ID=$(echo "$RESPONSE" | jq -r ".items[] | select(.fields[] | .text? == \"#$ISSUE_NUM\") | .id" | head -1)
+          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg num "#$ISSUE_NUM" '.items[] | select(.fields[] | .text? == $num) | .id' | head -1)
 
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
           echo "Found Item ID: $ITEM_ID"
