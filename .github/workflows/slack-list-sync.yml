@@ -47,7 +47,8 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"list_id\": \"$SLACK_LIST_ID\"}")
 
-          # 디버그: API 응답 확인
+          # 디버그: 전체 API 응답 출력
+          echo "Full Response: $RESPONSE"
           echo "API Response OK: $(echo "$RESPONSE" | jq -r '.ok')"
           echo "API Error: $(echo "$RESPONSE" | jq -r '.error // empty')"
           echo "Items count: $(echo "$RESPONSE" | jq -r '.items | length // 0')"
