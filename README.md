@@ -125,3 +125,4 @@ MIT
 # form $(date)
 # urlencode Sun, Dec 21, 2025  5:33:32 PM
 # json v2 Sun, Dec 21, 2025  5:34:58 PM
+# full Sun, Dec 21, 2025  5:35:56 PM
