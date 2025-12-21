@@ -123,3 +123,4 @@ MIT
 # debug v2 Sun, Dec 21, 2025  5:30:27 PM
 # curl fix $(date)
 # form $(date)
+# urlencode Sun, Dec 21, 2025  5:33:32 PM
