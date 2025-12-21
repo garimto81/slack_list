@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "item": {
+    "id": "I123456789",
+    "list_id": "F987654321",
+    "fields": [
+      {
+        "column_id": "progress",
+        "number": [100]
+      },
+      {
+        "column_id": "remarks",
+        "rich_text": [
+          {
+            "type": "rich_text",
+            "elements": [
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "type": "text",
+                    "text": "feat(auth): add social login"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

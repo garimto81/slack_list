@@ -1,0 +1,76 @@
+{
+  "ok": true,
+  "items": [
+    {
+      "id": "I123456789",
+      "list_id": "F987654321",
+      "fields": [
+        {
+          "column_id": "title",
+          "text": [
+            {
+              "text": "소셜 로그인 개발"
+            }
+          ]
+        },
+        {
+          "column_id": "issue_number",
+          "text": [
+            {
+              "text": "#101"
+            }
+          ]
+        },
+        {
+          "column_id": "progress",
+          "number": [50]
+        },
+        {
+          "column_id": "remarks",
+          "rich_text": [
+            {
+              "type": "rich_text",
+              "elements": [
+                {
+                  "type": "rich_text_section",
+                  "elements": [
+                    {
+                      "type": "text",
+                      "text": ""
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I123456790",
+      "list_id": "F987654321",
+      "fields": [
+        {
+          "column_id": "title",
+          "text": [
+            {
+              "text": "결제 페이지 개선"
+            }
+          ]
+        },
+        {
+          "column_id": "issue_number",
+          "text": [
+            {
+              "text": "#102"
+            }
+          ]
+        },
+        {
+          "column_id": "progress",
+          "number": [30]
+        }
+      ]
+    }
+  ]
+}

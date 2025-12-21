@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "error": "invalid_auth",
+  "warning": "missing_charset",
+  "response_metadata": {
+    "warnings": [
+      "missing_charset"
+    ]
+  }
+}

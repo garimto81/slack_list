@@ -5,7 +5,7 @@ on:
     types: [closed]
 
 env:
-  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+  SLACK_USER_TOKEN: ${{ secrets.SLACK_USER_TOKEN }}
   SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
 
 jobs:
@@ -39,8 +39,8 @@ jobs:
         run: |
           # Slack List에서 해당 Issue 번호를 가진 항목 검색
           RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
-            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
             -d "{\"list_id\": \"$SLACK_LIST_ID\"}")
 
           # Issue 번호로 항목 ID 찾기
@@ -58,18 +58,19 @@ jobs:
 
           # 진행률 100%로 업데이트 + PR 제목 비고에 저장
           curl -s -X POST "https://slack.com/api/slackLists.items.update" \
-            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+            -H "Content-Type: application/json; charset=utf-8" \
             -d "{
               \"list_id\": \"$SLACK_LIST_ID\",
-              \"item_id\": \"$ITEM_ID\",
-              \"fields\": [
+              \"cells\": [
                 {
-                  \"column_id\": \"progress\",
+                  \"row_id\": \"$ITEM_ID\",
+                  \"column_id\": \"Col0A55RYJHEV\",
                   \"number\": [100]
                 },
                 {
-                  \"column_id\": \"remarks\",
+                  \"row_id\": \"$ITEM_ID\",
+                  \"column_id\": \"Col0A4WG5SFD2\",
                   \"rich_text\": [{
                     \"type\": \"rich_text\",
                     \"elements\": [{

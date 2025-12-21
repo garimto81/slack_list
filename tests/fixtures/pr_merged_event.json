@@ -1,0 +1,10 @@
+{
+  "pull_request": {
+    "merged": true,
+    "title": "feat: add social login #123",
+    "html_url": "https://github.com/test/repo/pull/456",
+    "head": {
+      "ref": "feature/social-login-123"
+    }
+  }
+}
