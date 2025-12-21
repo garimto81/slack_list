@@ -1,0 +1,106 @@
+name: Sync Project Status
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # 매시간 실행
+  workflow_dispatch:      # 수동 실행
+
+env:
+  SLACK_USER_TOKEN: ${{ secrets.SLACK_USER_TOKEN }}
+  SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  sync-status:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Projects and Update Slack List
+        run: |
+          # 최근 7일간 활동한 프로젝트 조회
+          REPOS=$(gh api graphql -f query='
+          {
+            viewer {
+              repositories(first: 50, orderBy: {field: PUSHED_AT, direction: DESC}) {
+                nodes {
+                  name
+                  pushedAt
+                  issues(states: OPEN) {
+                    totalCount
+                  }
+                }
+              }
+            }
+          }' --jq '.data.viewer.repositories.nodes')
+
+          # 현재 Slack List 항목 조회
+          SLACK_ITEMS=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
+            -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "list_id=$SLACK_LIST_ID")
+
+          # 각 프로젝트 업데이트
+          echo "$REPOS" | jq -c '.[]' | while read -r repo; do
+            NAME=$(echo "$repo" | jq -r '.name')
+            PUSHED_AT=$(echo "$repo" | jq -r '.pushedAt')
+            ISSUES=$(echo "$repo" | jq -r '.issues.totalCount')
+
+            # 7일 이내 활동한 프로젝트만
+            PUSHED_DATE=$(date -d "$PUSHED_AT" +%s 2>/dev/null || echo 0)
+            CUTOFF_DATE=$(date -d "7 days ago" +%s)
+
+            if [ "$PUSHED_DATE" -lt "$CUTOFF_DATE" ]; then
+              continue
+            fi
+
+            # Slack List에서 해당 프로젝트 찾기
+            ITEM_ID=$(echo "$SLACK_ITEMS" | jq -r --arg name "$NAME" \
+              '.items[] | select(.fields[] | .text? == $name) | .id' | head -1)
+
+            if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" = "null" ]; then
+              echo "Skip: $NAME (not in Slack List)"
+              continue
+            fi
+
+            # 진행률 계산 (이슈 0개=100%, 이슈당 -20%, 최소 0%)
+            if [ "$ISSUES" -eq 0 ]; then
+              PROGRESS=100
+              NOTE="완료 | $(date +%Y-%m-%d)"
+            else
+              PROGRESS=$((100 - ISSUES * 20))
+              [ $PROGRESS -lt 0 ] && PROGRESS=0
+              NOTE="이슈 ${ISSUES}개 | $(date +%Y-%m-%d)"
+            fi
+
+            # Slack List 업데이트
+            RESULT=$(curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+              -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+              -H "Content-Type: application/json; charset=utf-8" \
+              -d "{
+                \"list_id\": \"$SLACK_LIST_ID\",
+                \"cells\": [
+                  {
+                    \"row_id\": \"$ITEM_ID\",
+                    \"column_id\": \"Col0A4WG5SFD2\",
+                    \"rich_text\": [{
+                      \"type\": \"rich_text\",
+                      \"elements\": [{
+                        \"type\": \"rich_text_section\",
+                        \"elements\": [{\"type\": \"text\", \"text\": \"$NOTE\"}]
+                      }]
+                    }]
+                  },
+                  {
+                    \"row_id\": \"$ITEM_ID\",
+                    \"column_id\": \"Col0A55RYJHEV\",
+                    \"number\": [$PROGRESS]
+                  }
+                ]
+              }")
+
+            if echo "$RESULT" | grep -q '"ok":true'; then
+              echo "Updated: $NAME ($PROGRESS%)"
+            else
+              echo "Failed: $NAME"
+            fi
+          done
