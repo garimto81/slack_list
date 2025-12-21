@@ -126,37 +126,38 @@ jobs:
           for i in $(seq 1 $FILLED); do BAR+="█"; done
           for i in $(seq 1 $EMPTY); do BAR+="░"; done
 
-          # Checklist가 있는 경우와 없는 경우 분기
+          # 진행률 필드용 텍스트 (프로그레스 바)
+          if [ "$TOTAL" -gt 0 ]; then
+            PROGRESS_BAR="$BAR $PROGRESS% ($DONE/$TOTAL)"
+          else
+            PROGRESS_BAR="$BAR 100%"
+          fi
+
+          # 비고 필드용 텍스트 (진행중인 항목만)
           if [ "$TOTAL" -gt 0 ]; then
             if [ "$PENDING_COUNT" -eq 0 ]; then
-              # 모두 완료
-              PROGRESS_TEXT="$BAR 100% ($DONE/$TOTAL)\n\n✅ 모두 완료!"
+              NOTE_TEXT="✅ 모두 완료!"
             else
-              # 진행중인 항목이 있음
               PENDING_ITEMS=$(cat << 'EOFPENDING'
           ${{ steps.extract.outputs.pending }}
           EOFPENDING
           )
-              # 5개 초과 시 추가 표시
               if [ "$PENDING_COUNT" -gt 5 ]; then
                 EXTRA=$((PENDING_COUNT - 5))
-                PENDING_ITEMS="$PENDING_ITEMS\n• 외 ${EXTRA}개"
+                NOTE_TEXT="🔄 진행중:\n$PENDING_ITEMS\n• 외 ${EXTRA}개"
+              else
+                NOTE_TEXT="🔄 진행중:\n$PENDING_ITEMS"
               fi
-              PROGRESS_TEXT="$BAR $PROGRESS% ($DONE/$TOTAL)\n\n🔄 진행중:\n$PENDING_ITEMS"
             fi
           else
-            # Checklist 없음 - PR 제목만 표시
             PR_TITLE="${{ steps.extract.outputs.pr_title }}"
-            PROGRESS_TEXT="$BAR 100%\n\n📝 $PR_TITLE"
+            NOTE_TEXT="📝 $PR_TITLE"
           fi
 
-          # JSON escape 처리
-          PROGRESS_TEXT_ESCAPED=$(echo "$PROGRESS_TEXT" | sed 's/"/\\"/g')
-
-          echo "bar=$BAR" >> $GITHUB_OUTPUT
+          echo "progress_bar=$PROGRESS_BAR" >> $GITHUB_OUTPUT
           {
-            echo 'text<<EOF'
-            echo "$PROGRESS_TEXT"
+            echo 'note<<EOF'
+            echo "$NOTE_TEXT"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
@@ -168,18 +169,20 @@ jobs:
           if [ -z "$ITEM_ID" ]; then
             ITEM_ID="${{ steps.create_item.outputs.item_id }}"
           fi
-          PROGRESS="${{ steps.extract.outputs.progress }}"
+
+          # 진행률 필드용 프로그레스 바
+          PROGRESS_BAR="${{ steps.progress_bar.outputs.progress_bar }}"
 
           # 비고 필드 내용 구성
           NOTE_TEXT=$(cat << 'EOFNOTE'
-          ${{ steps.progress_bar.outputs.text }}
+          ${{ steps.progress_bar.outputs.note }}
           EOFNOTE
           )
 
           # JSON 이스케이프 (줄바꿈, 따옴표)
           NOTE_JSON=$(echo "$NOTE_TEXT" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
-          # 진행률 + 프로그레스 바 비고 업데이트
+          # 진행률(프로그레스 바) + 비고(진행중 항목) 업데이트
           curl -s -X POST "https://slack.com/api/slackLists.items.update" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
@@ -189,7 +192,16 @@ jobs:
                 {
                   \"row_id\": \"$ITEM_ID\",
                   \"column_id\": \"Col0A55RYJHEV\",
-                  \"number\": [$PROGRESS]
+                  \"rich_text\": [{
+                    \"type\": \"rich_text\",
+                    \"elements\": [{
+                      \"type\": \"rich_text_section\",
+                      \"elements\": [{
+                        \"type\": \"text\",
+                        \"text\": \"$PROGRESS_BAR\"
+                      }]
+                    }]
+                  }]
                 },
                 {
                   \"row_id\": \"$ITEM_ID\",
