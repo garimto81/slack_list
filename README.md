@@ -22,11 +22,13 @@ PR Merge → GitHub Actions → Slack Lists API → List 업데이트
 ### 1. Slack App 생성
 
 1. [Slack API](https://api.slack.com/apps)에서 새 앱 생성
-2. **OAuth & Permissions**에서 Bot Token Scopes 추가:
+2. **OAuth & Permissions**에서 User Token Scopes 추가:
    - `lists:read`
    - `lists:write`
 3. 워크스페이스에 앱 설치
-4. **Bot User OAuth Token** 복사 (`xoxb-...`)
+4. **User OAuth Token** 복사 (`xoxp-...`)
+
+> **Note**: Bot Token(`xoxb-`)은 Lists API 접근 불가. 반드시 User Token(`xoxp-`) 사용
 
 ### 2. Slack List 생성
 
@@ -44,7 +46,7 @@ Repository Settings > Secrets and variables > Actions에서 추가:
 
 | Secret 이름 | 설명 | 예시 |
 |------------|------|------|
-| `SLACK_BOT_TOKEN` | Slack Bot 토큰 | `xoxb-123-456-abc` |
+| `SLACK_USER_TOKEN` | Slack User 토큰 | `xoxp-123-456-abc` |
 | `SLACK_LIST_ID` | Slack List ID | `F1234ABCD` |
 | `SLACK_WEBHOOK_URL` | 실패 알림용 Webhook | `https://hooks.slack.com/...` |
 
@@ -54,9 +56,9 @@ Slack List의 실제 Column ID를 확인하고 워크플로우 수정:
 
 ```bash
 curl -X POST "https://slack.com/api/slackLists.items.list" \
-  -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"list_id": "YOUR_LIST_ID"}'
+  -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "list_id=YOUR_LIST_ID"
 ```
 
 응답에서 `column_id` 값을 확인하고 `.github/workflows/slack-list-sync.yml` 수정.
@@ -102,7 +104,7 @@ fix/456-session-bug
 ### 권한 오류
 
 - Slack App에 `lists:read`, `lists:write` 권한 확인
-- Bot Token이 올바른지 확인
+- User Token(`xoxp-`)을 사용하는지 확인 (Bot Token 불가)
 - Slack Pro 플랜 이상인지 확인 (Lists API 필수)
 
 ## 비용
@@ -115,17 +117,3 @@ fix/456-session-bug
 ## 라이선스
 
 MIT
-# 한글 테스트 Sun, Dec 21, 2025  5:20:40 PM
-# 테스트 v2 Sun, Dec 21, 2025  5:23:12 PM
-# 테스트 v3 Sun, Dec 21, 2025  5:24:53 PM
-# 테스트 v4 Sun, Dec 21, 2025  5:27:47 PM
-# debug test Sun, Dec 21, 2025  5:29:21 PM
-# debug v2 Sun, Dec 21, 2025  5:30:27 PM
-# curl fix $(date)
-# form $(date)
-# urlencode Sun, Dec 21, 2025  5:33:32 PM
-# json v2 Sun, Dec 21, 2025  5:34:58 PM
-# full Sun, Dec 21, 2025  5:35:56 PM
-# json body Sun, Dec 21, 2025  5:36:56 PM
-# form final Sun, Dec 21, 2025  5:37:59 PM
-# oneline
