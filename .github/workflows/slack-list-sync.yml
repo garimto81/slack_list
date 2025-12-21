@@ -43,6 +43,10 @@ jobs:
             -H "Content-Type: application/json; charset=utf-8" \
             -d "{\"list_id\": \"$SLACK_LIST_ID\"}")
 
+          # 디버그: API 응답 확인
+          echo "API Response OK: $(echo "$RESPONSE" | jq -r '.ok')"
+          echo "Items count: $(echo "$RESPONSE" | jq -r '.items | length')"
+
           # Issue 번호로 항목 ID 찾기
           ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
           ITEM_ID=$(echo "$RESPONSE" | jq -r --arg num "#$ISSUE_NUM" '.items[] | select(.fields[] | .text? == $num) | .id' | head -1)
