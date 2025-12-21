@@ -81,33 +81,3 @@ jobs:
                 }
               ]
             }"
-
-      - name: Send Failure Alert
-        if: steps.extract.outputs.issue_number == '' || steps.get_item.outputs.item_id == ''
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_URL="${{ github.event.pull_request.html_url }}"
-          ISSUE_NUM="${{ steps.extract.outputs.issue_number }}"
-
-          if [ -z "$ISSUE_NUM" ]; then
-            MESSAGE="PR 제목에서 Issue 번호(#123)를 찾을 수 없습니다"
-          else
-            MESSAGE="Slack List에서 #$ISSUE_NUM 항목을 찾을 수 없습니다"
-          fi
-
-          curl -s -X POST "$SLACK_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"text\": \"GitHub-Slack Sync 실패\",
-              \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \"*GitHub-Slack Sync 실패*\n$MESSAGE\n\n*PR:* <$PR_URL|$PR_TITLE>\"
-                  }
-                }
-              ]
-            }"
