@@ -8,7 +8,7 @@ on:
 env:
   SLACK_USER_TOKEN: ${{ secrets.SLACK_USER_TOKEN }}
   SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GH_PAT }}
 
 jobs:
   sync-status:
