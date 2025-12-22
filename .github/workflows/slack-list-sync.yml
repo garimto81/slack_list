@@ -165,22 +165,25 @@ jobs:
 
           echo "PR Body Parsing (Fallback): $DONE/$TOTAL ($PROGRESS%)"
 
-      # Step 5: 자동 체크 - PR 번호 매칭 항목 업데이트
+      # Step 5: 자동 체크 - Issue 번호 매칭 항목 업데이트
       - name: Auto-check Matching Items
         id: auto_check
         if: steps.find_checklist.outputs.source == 'document'
         run: |
-          PR_NUM="${{ steps.extract_ids.outputs.pr_number }}"
+          # Issue 번호 사용 (PR 제목/브랜치에서 추출된 번호)
+          ISSUE_NUM="${{ steps.extract_ids.outputs.issue_number }}"
           CHECKLIST_PATH="${{ steps.find_checklist.outputs.checklist_path }}"
 
-          echo "Auto-checking items with PR #$PR_NUM in $CHECKLIST_PATH"
+          echo "Auto-checking items with Issue #$ISSUE_NUM in $CHECKLIST_PATH"
 
-          # PR 번호와 매칭되는 미완료 항목 체크
-          # 리스트 형식: - [ ] 항목 (#123)
-          sed -i "s/- \[ \] \(.*\)(#$PR_NUM)/- [x] \1(#$PR_NUM)/g" "$CHECKLIST_PATH"
+          if [ -n "$ISSUE_NUM" ]; then
+            # Issue 번호와 매칭되는 미완료 항목 체크
+            # 리스트 형식: - [ ] 항목 (#123)
+            sed -i "s/- \[ \] \(.*\)(#$ISSUE_NUM)/- [x] \1(#$ISSUE_NUM)/g" "$CHECKLIST_PATH"
 
-          # 테이블 형식: | [ ] | 항목 | #123 |
-          sed -i "s/| \[ \] |/| [x] |/g" "$CHECKLIST_PATH"
+            # 테이블 형식: | [ ] | 항목 | #123 |
+            sed -i "s/| \[ \] |/| [x] |/g" "$CHECKLIST_PATH"
+          fi
 
           # 변경 확인
           if git diff --quiet "$CHECKLIST_PATH"; then
@@ -196,19 +199,19 @@ jobs:
         if: steps.auto_check.outputs.updated == 'true'
         run: |
           CHECKLIST_PATH="${{ steps.find_checklist.outputs.checklist_path }}"
-          PR_NUM="${{ steps.extract_ids.outputs.pr_number }}"
+          ISSUE_NUM="${{ steps.extract_ids.outputs.issue_number }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add "$CHECKLIST_PATH"
-          git commit -m "chore: auto-check checklist for PR #$PR_NUM
+          git commit -m "chore: auto-check checklist for #$ISSUE_NUM
 
           🤖 Generated with [Claude Code](https://claude.ai/code)"
 
           git push
 
-          echo "Committed checklist update for PR #$PR_NUM"
+          echo "Committed checklist update for #$ISSUE_NUM"
 
       # Step 7: 최종 진행률 계산 (자동 체크 후 재파싱)
       - name: Calculate Final Progress
