@@ -18,12 +18,14 @@ PR Merge → GitHub Actions → Slack Lists API → List 업데이트
          └─────────────────────────────────────┘
 ```
 
-**워크플로우 단계**:
+**워크플로우 단계** (v1.1):
 1. `pull_request.closed` + `merged == true` 트리거
-2. PR 제목/브랜치명에서 Issue 번호 추출 (`#123` 또는 `feat/123-...`)
-3. PR 본문 Checklist 파싱 → 진행률 계산
-4. `slackLists.items.list`로 항목 검색 → 없으면 `items.create`로 생성
-5. `slackLists.items.update`로 프로그레스 바 + 진행중 항목 업데이트
+2. PR 제목/브랜치명에서 PRD ID 및 Issue 번호 추출
+3. **Checklist 문서 탐색** (`docs/checklists/PRD-NNNN.md` 등)
+4. 문서 파싱 → 진행률 계산
+5. **자동 체크**: Issue 번호 매칭 항목 `[ ]` → `[x]`
+6. 변경된 Checklist 커밋 (github-actions[bot])
+7. Slack List 업데이트 (프로그레스 바 + 진행중 항목)
 
 ## 핵심 파일
 
