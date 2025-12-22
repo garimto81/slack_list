@@ -319,23 +319,19 @@ jobs:
           DONE="${{ steps.final_progress.outputs.done }}"
           PENDING_COUNT="${{ steps.final_progress.outputs.pending_count }}"
 
-          # 10칸 프로그레스 바 생성
-          FILLED=$((PROGRESS / 10))
-          EMPTY=$((10 - FILLED))
-
-          BAR=""
-          for i in $(seq 1 $FILLED); do BAR+="█"; done
-          for i in $(seq 1 $EMPTY); do BAR+="░"; done
-
-          # 진행률 필드용 텍스트 (프로그레스 바)
+          # Checklist가 있는 경우만 프로그레스 바 생성
           if [ "$TOTAL" -gt 0 ]; then
+            # 10칸 프로그레스 바 생성
+            FILLED=$((PROGRESS / 10))
+            EMPTY=$((10 - FILLED))
+
+            BAR=""
+            for i in $(seq 1 $FILLED); do BAR+="█"; done
+            for i in $(seq 1 $EMPTY); do BAR+="░"; done
+
             PROGRESS_BAR="$BAR $PROGRESS% ($DONE/$TOTAL)"
-          else
-            PROGRESS_BAR="$BAR 100%"
-          fi
 
-          # 비고 필드용 텍스트 (진행중인 항목만)
-          if [ "$TOTAL" -gt 0 ]; then
+            # 비고 필드용 텍스트 (진행중인 항목만)
             if [ "$PENDING_COUNT" -eq 0 ]; then
               NOTE_TEXT="✅ 모두 완료!"
             else
@@ -351,6 +347,8 @@ jobs:
               fi
             fi
           else
+            # Checklist 미작성 시 N/A 표시
+            PROGRESS_BAR="— Checklist 미작성"
             PR_TITLE="${{ steps.extract_ids.outputs.pr_title }}"
             NOTE_TEXT="📝 $PR_TITLE"
           fi
