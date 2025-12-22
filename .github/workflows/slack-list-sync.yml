@@ -348,7 +348,7 @@ jobs:
           echo "item_id=$NEW_ITEM_ID" >> $GITHUB_OUTPUT
           echo "Created new item for repo '$REPO_NAME': $NEW_ITEM_ID"
 
-      # Step 10: 프로그레스 바 생성
+      # Step 10: 프로그레스 바 생성 (컬러 이모지 버전)
       - name: Build Progress Bar
         id: progress_bar
         run: |
@@ -359,15 +359,29 @@ jobs:
 
           # Checklist가 있는 경우만 프로그레스 바 생성
           if [ "$TOTAL" -gt 0 ]; then
+            # 단계별 이모지 결정
+            if [ "$PROGRESS" -le 30 ]; then
+              STATUS_EMOJI="🔴"
+              FILL_BLOCK="🟥"
+            elif [ "$PROGRESS" -le 70 ]; then
+              STATUS_EMOJI="🟡"
+              FILL_BLOCK="🟨"
+            else
+              STATUS_EMOJI="🟢"
+              FILL_BLOCK="🟩"
+            fi
+
+            EMPTY_BLOCK="⬜"
+
             # 10칸 프로그레스 바 생성
             FILLED=$((PROGRESS / 10))
             EMPTY=$((10 - FILLED))
 
             BAR=""
-            for i in $(seq 1 $FILLED); do BAR+="█"; done
-            for i in $(seq 1 $EMPTY); do BAR+="░"; done
+            for i in $(seq 1 $FILLED); do BAR+="$FILL_BLOCK"; done
+            for i in $(seq 1 $EMPTY); do BAR+="$EMPTY_BLOCK"; done
 
-            PROGRESS_BAR="$BAR $PROGRESS% ($DONE/$TOTAL)"
+            PROGRESS_BAR="$STATUS_EMOJI $BAR $PROGRESS% ($DONE/$TOTAL)"
 
             # 비고 필드용 텍스트 (진행중인 항목만)
             if [ "$PENDING_COUNT" -eq 0 ]; then

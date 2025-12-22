@@ -1,0 +1,281 @@
+name: Slack List Sync (Checklist Change)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/checklists/*.md'
+      - 'tasks/prds/*-prd-*.md'
+      - 'docs/PRD-*.md'
+      - 'docs/CHECKLIST.md'
+
+concurrency:
+  group: slack-list-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SLACK_USER_TOKEN: ${{ secrets.SLACK_USER_TOKEN }}
+  SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
+
+jobs:
+  update-slack-list:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # Step 1: 변경된 Checklist 파일 감지
+      - name: Detect Changed Checklists
+        id: changed_files
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(docs/checklists/|tasks/prds/|docs/PRD-|docs/CHECKLIST).*\.md$' || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No checklist changes detected"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            {
+              echo 'files<<EOF'
+              echo "$CHANGED"
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+            echo "Changed files:"
+            echo "$CHANGED"
+          fi
+
+      # Step 2: 각 변경된 Checklist 처리
+      - name: Process Changed Checklists
+        if: steps.changed_files.outputs.has_changes == 'true'
+        id: process_checklists
+        run: |
+          FULL_REPO="${{ github.repository }}"
+          DEFAULT_REPO_NAME=$(echo "$FULL_REPO" | cut -d'/' -f2)
+
+          # 결과 저장용
+          RESULTS=""
+
+          echo "${{ steps.changed_files.outputs.files }}" | while read -r FILE; do
+            if [ -z "$FILE" ]; then continue; fi
+
+            echo "Processing: $FILE"
+
+            # PRD ID 추출
+            PRD_ID=$(basename "$FILE" .md | grep -oE 'PRD-[0-9]+' || echo "")
+            echo "  PRD ID: $PRD_ID"
+
+            # Repository 추출 (문서 내 **Repository**: 값)
+            REPO_NAME=$(grep -oP '\*\*Repository\*\*:\s*\K\S+' "$FILE" 2>/dev/null || echo "")
+            if [ -z "$REPO_NAME" ]; then
+              REPO_NAME="$DEFAULT_REPO_NAME"
+            fi
+            echo "  Repository: $REPO_NAME"
+
+            # Checklist 파싱
+            TOTAL=$(grep -cE '^\s*[-|]\s*\[[ xX]\]' "$FILE" 2>/dev/null || echo 0)
+            DONE=$(grep -cE '^\s*[-|]\s*\[[xX]\]' "$FILE" 2>/dev/null || echo 0)
+
+            if [ "$TOTAL" -gt 0 ]; then
+              PROGRESS=$((DONE * 100 / TOTAL))
+            else
+              PROGRESS=100
+            fi
+            echo "  Progress: $DONE/$TOTAL ($PROGRESS%)"
+
+            # 진행중 항목 추출
+            PENDING=$(grep -E '^\s*[-|]\s*\[ \]' "$FILE" 2>/dev/null | sed 's/^\s*[-|]\s*\[ \]\s*/• /' | head -5)
+            PENDING_COUNT=$(grep -cE '^\s*[-|]\s*\[ \]' "$FILE" 2>/dev/null || echo 0)
+
+            # 결과 누적 (파이프 형식)
+            echo "$FILE|$REPO_NAME|$PROGRESS|$DONE|$TOTAL|$PENDING_COUNT" >> /tmp/checklist_results.txt
+          done
+
+          if [ -f /tmp/checklist_results.txt ]; then
+            {
+              echo 'results<<EOF'
+              cat /tmp/checklist_results.txt
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+          fi
+
+      # Step 3: Slack List 업데이트
+      - name: Update Slack List
+        if: steps.changed_files.outputs.has_changes == 'true'
+        run: |
+          # 현재 날짜 (KST)
+          CURRENT_DATE=$(TZ=Asia/Seoul date +"%Y-%m-%d")
+
+          echo "${{ steps.changed_files.outputs.files }}" | while read -r FILE; do
+            if [ -z "$FILE" ]; then continue; fi
+
+            echo "Updating Slack for: $FILE"
+
+            # Repository 추출
+            FULL_REPO="${{ github.repository }}"
+            DEFAULT_REPO_NAME=$(echo "$FULL_REPO" | cut -d'/' -f2)
+            REPO_NAME=$(grep -oP '\*\*Repository\*\*:\s*\K\S+' "$FILE" 2>/dev/null || echo "$DEFAULT_REPO_NAME")
+
+            # Checklist 파싱
+            TOTAL=$(grep -cE '^\s*[-|]\s*\[[ xX]\]' "$FILE" 2>/dev/null || echo 0)
+            DONE=$(grep -cE '^\s*[-|]\s*\[[xX]\]' "$FILE" 2>/dev/null || echo 0)
+            PENDING_COUNT=$(grep -cE '^\s*[-|]\s*\[ \]' "$FILE" 2>/dev/null || echo 0)
+
+            if [ "$TOTAL" -gt 0 ]; then
+              PROGRESS=$((DONE * 100 / TOTAL))
+            else
+              PROGRESS=100
+            fi
+
+            # 프로그레스 바 생성 (컬러 이모지 버전)
+            if [ "$TOTAL" -gt 0 ]; then
+              # 단계별 이모지 결정
+              if [ "$PROGRESS" -le 30 ]; then
+                STATUS_EMOJI="🔴"
+                FILL_BLOCK="🟥"
+              elif [ "$PROGRESS" -le 70 ]; then
+                STATUS_EMOJI="🟡"
+                FILL_BLOCK="🟨"
+              else
+                STATUS_EMOJI="🟢"
+                FILL_BLOCK="🟩"
+              fi
+
+              EMPTY_BLOCK="⬜"
+              FILLED=$((PROGRESS / 10))
+              EMPTY=$((10 - FILLED))
+
+              BAR=""
+              for i in $(seq 1 $FILLED); do BAR+="$FILL_BLOCK"; done
+              for i in $(seq 1 $EMPTY); do BAR+="$EMPTY_BLOCK"; done
+
+              PROGRESS_BAR="$STATUS_EMOJI $BAR $PROGRESS% ($DONE/$TOTAL)"
+
+              # 비고 필드
+              if [ "$PENDING_COUNT" -eq 0 ]; then
+                NOTE_TEXT="✅ 모두 완료!"
+              else
+                PENDING_ITEMS=$(grep -E '^\s*[-|]\s*\[ \]' "$FILE" 2>/dev/null | sed 's/^\s*[-|]\s*\[ \]\s*/• /' | head -5)
+                if [ "$PENDING_COUNT" -gt 5 ]; then
+                  EXTRA=$((PENDING_COUNT - 5))
+                  NOTE_TEXT="🔄 진행중:\n$PENDING_ITEMS\n• 외 ${EXTRA}개"
+                else
+                  NOTE_TEXT="🔄 진행중:\n$PENDING_ITEMS"
+                fi
+              fi
+            else
+              PROGRESS_BAR="N/A"
+              NOTE_TEXT="📝 Checklist 없음"
+            fi
+
+            # Slack List에서 항목 검색
+            RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
+              -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "list_id=$SLACK_LIST_ID")
+
+            ITEM_ID=$(echo "$RESPONSE" | jq -r --arg repo "$REPO_NAME" \
+              '.items[] | select(
+                .fields[] | select(.column_id == "Col0A4WG2LPHA") | .text == $repo
+              ) | .id' | head -1)
+
+            # 항목이 없으면 생성
+            if [ -z "$ITEM_ID" ]; then
+              echo "  Creating new item for: $REPO_NAME"
+              CREATE_RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.create" \
+                -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+                -H "Content-Type: application/json; charset=utf-8" \
+                -d "{
+                  \"list_id\": \"$SLACK_LIST_ID\",
+                  \"item\": { \"fields\": {} }
+                }")
+
+              ITEM_ID=$(echo "$CREATE_RESPONSE" | jq -r '.item.id // empty')
+
+              # 제목 설정
+              if [ -n "$ITEM_ID" ]; then
+                curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+                  -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+                  -H "Content-Type: application/json; charset=utf-8" \
+                  -d "{
+                    \"list_id\": \"$SLACK_LIST_ID\",
+                    \"cells\": [{
+                      \"row_id\": \"$ITEM_ID\",
+                      \"column_id\": \"Col0A4WG2LPHA\",
+                      \"rich_text\": [{
+                        \"type\": \"rich_text\",
+                        \"elements\": [{
+                          \"type\": \"rich_text_section\",
+                          \"elements\": [{
+                            \"type\": \"text\",
+                            \"text\": \"$REPO_NAME\"
+                          }]
+                        }]
+                      }]
+                    }]
+                  }"
+              fi
+            fi
+
+            if [ -z "$ITEM_ID" ]; then
+              echo "  Error: Could not find or create item for $REPO_NAME"
+              continue
+            fi
+
+            echo "  Updating item: $ITEM_ID"
+
+            # JSON 이스케이프
+            NOTE_JSON=$(echo "$NOTE_TEXT" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
+            # Slack List 업데이트
+            curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+              -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+              -H "Content-Type: application/json; charset=utf-8" \
+              -d "{
+                \"list_id\": \"$SLACK_LIST_ID\",
+                \"cells\": [
+                  {
+                    \"row_id\": \"$ITEM_ID\",
+                    \"column_id\": \"Col0A55RYJHEV\",
+                    \"rich_text\": [{
+                      \"type\": \"rich_text\",
+                      \"elements\": [{
+                        \"type\": \"rich_text_section\",
+                        \"elements\": [{
+                          \"type\": \"text\",
+                          \"text\": \"$PROGRESS_BAR\"
+                        }]
+                      }]
+                    }]
+                  },
+                  {
+                    \"row_id\": \"$ITEM_ID\",
+                    \"column_id\": \"Col0A4WG5SFD2\",
+                    \"rich_text\": [{
+                      \"type\": \"rich_text\",
+                      \"elements\": [{
+                        \"type\": \"rich_text_section\",
+                        \"elements\": [{
+                          \"type\": \"text\",
+                          \"text\": \"$NOTE_JSON\"
+                        }]
+                      }]
+                    }]
+                  },
+                  {
+                    \"row_id\": \"$ITEM_ID\",
+                    \"column_id\": \"Col0A4ZL4THPU\",
+                    \"date\": [\"$CURRENT_DATE\"]
+                  }
+                ]
+              }"
+
+            echo "  Updated: $REPO_NAME ($PROGRESS_BAR)"
+          done
+
+          echo "All updates completed"
