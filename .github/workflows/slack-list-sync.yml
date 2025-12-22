@@ -4,6 +4,9 @@ on:
   pull_request:
     types: [closed]
 
+permissions:
+  contents: write  # Checklist 자동 체크 커밋용
+
 env:
   SLACK_USER_TOKEN: ${{ secrets.SLACK_USER_TOKEN }}
   SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
