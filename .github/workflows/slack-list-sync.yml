@@ -354,7 +354,7 @@ jobs:
             fi
           else
             # Checklist 미작성 시 N/A 표시
-            PROGRESS_BAR="— Checklist 미작성"
+            PROGRESS_BAR="N/A"
             PR_TITLE="${{ steps.extract_ids.outputs.pr_title }}"
             NOTE_TEXT="📝 $PR_TITLE"
           fi
@@ -365,6 +365,15 @@ jobs:
             echo "$NOTE_TEXT"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
+
+      # Step 10.5: 현재 날짜 생성 (KST)
+      - name: Get Current Date (KST)
+        id: current_date
+        run: |
+          # KST (Asia/Seoul) 기준 날짜
+          CURRENT_DATE=$(TZ=Asia/Seoul date +"%Y-%m-%d")
+          echo "date=$CURRENT_DATE" >> $GITHUB_OUTPUT
+          echo "Current date (KST): $CURRENT_DATE"
 
       # Step 11: Slack List 업데이트
       - name: Update Slack List Item
@@ -388,7 +397,10 @@ jobs:
           # JSON 이스케이프 (줄바꿈, 따옴표)
           NOTE_JSON=$(echo "$NOTE_TEXT" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
-          # 진행률(프로그레스 바) + 비고(진행중 항목) 업데이트
+          # 현재 날짜 (KST)
+          CURRENT_DATE="${{ steps.current_date.outputs.date }}"
+
+          # 진행률(프로그레스 바) + 비고(진행중 항목) + 마지막 업데이트 업데이트
           curl -s -X POST "https://slack.com/api/slackLists.items.update" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
@@ -422,6 +434,11 @@ jobs:
                       }]
                     }]
                   }]
+                },
+                {
+                  \"row_id\": \"$ITEM_ID\",
+                  \"column_id\": \"Col0A4ZL4THPU\",
+                  \"date\": [\"$CURRENT_DATE\"]
                 }
               ]
             }"

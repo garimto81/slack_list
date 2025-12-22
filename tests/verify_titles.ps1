@@ -19,5 +19,16 @@ $body = @{ list_id = $listId } | ConvertTo-Json
 
 $result = Invoke-RestMethod -Uri 'https://slack.com/api/slackLists.items.list' -Method Post -Headers $headers -Body $body
 
-Write-Host "Full API Response:"
-$result | ConvertTo-Json -Depth 10
+Write-Host "=== Slack List Items ===" -ForegroundColor Cyan
+Write-Host ""
+
+foreach ($item in $result.items) {
+    $id = $item.id
+    $title = ($item.fields | Where-Object { $_.column_id -eq "Col0A4WG2LPHA" }).text
+    $progress = ($item.fields | Where-Object { $_.column_id -eq "Col0A55RYJHEV" }).text
+
+    Write-Host "ID: $id" -ForegroundColor Yellow
+    Write-Host "  Title: $title"
+    Write-Host "  Progress: $progress"
+    Write-Host ""
+}

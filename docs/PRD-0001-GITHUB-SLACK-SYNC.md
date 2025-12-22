@@ -156,7 +156,7 @@ Acceptance Criteria:
 - **수락 기준**:
   - [x] 진행률(Progress): 프로그래스바 % 업데이트 (예: 50% → 100%)
   - [x] 비고(Description): 진행중 항목 목록으로 업데이트
-  - [ ] 날짜(Date): 현재 시간으로 업데이트
+  - [x] 날짜(Date): 현재 시간으로 업데이트 (KST 기준)
   - [x] **Quiet Update**: 채널에 별도 메시지 알림 없음 (기존 리스트 항목만 수정)
   - [ ] 매칭 실패 시 Slack 알림 발송
 
@@ -344,14 +344,16 @@ sequenceDiagram
 - [x] Slack OAuth 토큰 안전 관리
 - [x] PR 데이터 최소 수집 (민감 정보 제외)
 
-### Column ID 설정 *(v1.1 추가)*
+### Column ID 설정 *(v1.1 추가, v1.2 업데이트)*
 
 Slack List의 Column ID는 **하드코딩**되어 있습니다. 새 List 사용 시 반드시 확인 필요:
 
 | Column | ID | 타입 | 용도 |
 |--------|-----|------|------|
+| 제목 | `Col0A4WG2LPHA` | rich_text | 레포지토리 이름 (owner 생략) |
 | 진행률 | `Col0A55RYJHEV` | rich_text | 프로그레스 바 |
 | 비고 | `Col0A4WG5SFD2` | rich_text | 진행중 항목 |
+| 마지막 업데이트 | `Col0A4ZL4THPU` | date | 자동 갱신 날짜 (KST) |
 
 **Column ID 확인 방법**:
 ```bash
