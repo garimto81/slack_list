@@ -24,17 +24,21 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 1: PRD ID 및 Issue 번호 추출
-      - name: Extract PRD ID and Issue Number
+      # Step 1: PRD ID, Issue 번호, 레포 이름 추출
+      - name: Extract PRD ID, Issue Number, and Repo Name
         id: extract_ids
         run: |
           PR_TITLE="${{ github.event.pull_request.title }}"
           BRANCH_NAME="${{ github.head_ref }}"
           PR_NUM="${{ github.event.pull_request.number }}"
+          FULL_REPO="${{ github.repository }}"
           PR_BODY=$(cat << 'EOFBODY'
           ${{ github.event.pull_request.body }}
           EOFBODY
           )
+
+          # 0. 레포 이름 추출 (owner 제거)
+          REPO_NAME=$(echo "$FULL_REPO" | cut -d'/' -f2)
 
           # 1. PRD ID 추출 (우선순위: 제목 > 브랜치 > 본문)
           PRD_ID=""
@@ -58,11 +62,13 @@ jobs:
             ISSUE_NUM=$(echo "$BRANCH_NAME" | grep -oE '[0-9]+' | head -1)
           fi
 
+          echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
           echo "prd_id=$PRD_ID" >> $GITHUB_OUTPUT
           echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
           echo "pr_number=$PR_NUM" >> $GITHUB_OUTPUT
           echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
 
+          echo "Repository: $REPO_NAME"
           echo "Extracted PRD ID: $PRD_ID"
           echo "Extracted Issue Number: $ISSUE_NUM"
           echo "PR Number: $PR_NUM"
@@ -260,61 +266,74 @@ jobs:
 
           echo "Final Progress: $DONE/$TOTAL ($PROGRESS%)"
 
-      # Step 8: Slack List Item 조회
+      # Step 8: Slack List Item 조회 (레포 이름으로 검색)
       - name: Get Slack List Item ID
         id: get_item
-        if: steps.extract_ids.outputs.issue_number != ''
         run: |
           RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "list_id=$SLACK_LIST_ID")
 
-          ISSUE_NUM="${{ steps.extract_ids.outputs.issue_number }}"
-          PRD_ID="${{ steps.extract_ids.outputs.prd_id }}"
+          REPO_NAME="${{ steps.extract_ids.outputs.repo_name }}"
 
-          # Issue 번호 또는 PRD ID로 항목 검색
-          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg num "#$ISSUE_NUM" --arg prd "$PRD_ID" \
+          # 제목 Column (Col0A4WG2LPHA)에서 레포 이름으로 검색
+          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg repo "$REPO_NAME" \
             '.items[] | select(
-              (.fields[] | .text? == $num) or
-              (.fields[] | .text? | contains($prd) // false)
+              .fields[] | select(.column_id == "Col0A4WG2LPHA") | .text == $repo
             ) | .id' | head -1)
 
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
+          echo "Found item for repo '$REPO_NAME': $ITEM_ID"
 
       # Step 9: Slack List Item 생성 (없을 경우)
       - name: Create Slack List Item (if not exists)
         id: create_item
-        if: steps.extract_ids.outputs.issue_number != '' && steps.get_item.outputs.item_id == ''
+        if: steps.get_item.outputs.item_id == ''
         run: |
-          ISSUE_NUM="${{ steps.extract_ids.outputs.issue_number }}"
-          PR_TITLE="${{ steps.extract_ids.outputs.pr_title }}"
-          PRD_ID="${{ steps.extract_ids.outputs.prd_id }}"
+          REPO_NAME="${{ steps.extract_ids.outputs.repo_name }}"
 
-          # 제목 형식: [PRD-0001] #123 - PR 제목 또는 #123 - PR 제목
-          if [ -n "$PRD_ID" ]; then
-            TITLE="[$PRD_ID] #$ISSUE_NUM - $PR_TITLE"
-          else
-            TITLE="#$ISSUE_NUM - $PR_TITLE"
-          fi
-
+          # 항목 생성
           RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.create" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "{
               \"list_id\": \"$SLACK_LIST_ID\",
               \"item\": {
-                \"fields\": {
-                  \"title\": \"$TITLE\"
-                }
+                \"fields\": {}
               }
             }")
 
           echo "API Response: $RESPONSE"
 
           NEW_ITEM_ID=$(echo "$RESPONSE" | jq -r '.item.id // empty')
+
+          # 제목 Column에 레포 이름 설정
+          if [ -n "$NEW_ITEM_ID" ]; then
+            curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+              -H "Authorization: Bearer $SLACK_USER_TOKEN" \
+              -H "Content-Type: application/json; charset=utf-8" \
+              -d "{
+                \"list_id\": \"$SLACK_LIST_ID\",
+                \"cells\": [{
+                  \"row_id\": \"$NEW_ITEM_ID\",
+                  \"column_id\": \"Col0A4WG2LPHA\",
+                  \"rich_text\": [{
+                    \"type\": \"rich_text\",
+                    \"elements\": [{
+                      \"type\": \"rich_text_section\",
+                      \"elements\": [{
+                        \"type\": \"text\",
+                        \"text\": \"$REPO_NAME\"
+                      }]
+                    }]
+                  }]
+                }]
+              }"
+          fi
+
           echo "item_id=$NEW_ITEM_ID" >> $GITHUB_OUTPUT
-          echo "Created new item: $NEW_ITEM_ID"
+          echo "Created new item for repo '$REPO_NAME': $NEW_ITEM_ID"
 
       # Step 10: 프로그레스 바 생성
       - name: Build Progress Bar
