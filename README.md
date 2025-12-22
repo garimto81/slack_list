@@ -5,10 +5,13 @@ PR 머지 시 Slack List를 자동으로 업데이트하는 GitHub Actions 워�
 ## 기능
 
 - PR 머지 시 자동 트리거
-- PR 본문의 Checklist 파싱하여 진행률 자동 계산
+- **PRD 기반 Checklist 문서 파싱** (v1.1 신규)
+- PR 본문의 Checklist 파싱 (Fallback)
 - 시각적 프로그레스 바 표시 (`████░░░░░░ 60%`)
+- **PR 머지 시 해당 항목 자동 체크** (v1.1 신규)
 - 진행중인 Checklist 항목 비고에 표시
 - Slack List에 항목 없으면 자동 생성
+- Checklist 미작성 시 "N/A" 표시
 
 ## 아키텍처
 
