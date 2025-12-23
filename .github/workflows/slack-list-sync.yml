@@ -10,6 +10,11 @@ permissions:
 env:
   SLACK_USER_TOKEN: ${{ secrets.SLACK_USER_TOKEN }}
   SLACK_LIST_ID: ${{ secrets.SLACK_LIST_ID }}
+  # Column IDs (중앙 관리)
+  COL_TITLE: 'Col0A4WG2LPHA'
+  COL_PROGRESS: 'Col0A55RYJHEV'
+  COL_NOTES: 'Col0A4WG5SFD2'
+  COL_DATE: 'Col0A4ZL4THPU'
 
 jobs:
   update-slack-list:
@@ -192,11 +197,14 @@ jobs:
 
           if [ -n "$ISSUE_NUM" ]; then
             # Issue 번호와 매칭되는 미완료 항목 체크
-            # 리스트 형식: - [ ] 항목 (#123)
+            # 리스트 형식: - [ ] 항목 (#123) 또는 - [ ] 항목 #123
             sed -i "s/- \[ \] \(.*\)(#$ISSUE_NUM)/- [x] \1(#$ISSUE_NUM)/g" "$CHECKLIST_PATH"
+            sed -i "s/- \[ \] \(.*\)#$ISSUE_NUM\([^0-9]\|$\)/- [x] \1#$ISSUE_NUM\2/g" "$CHECKLIST_PATH"
 
-            # 테이블 형식: | [ ] | 항목 | #123 |
-            sed -i "s/| \[ \] |/| [x] |/g" "$CHECKLIST_PATH"
+            # 테이블 형식: | [ ] | 항목 | #123 | (Issue 번호 매칭 필요)
+            # 동일 라인에 #123 또는 | #123 | 존재 시에만 체크
+            sed -i "/| *#$ISSUE_NUM *|/s/| \[ \] |/| [x] |/g" "$CHECKLIST_PATH"
+            sed -i "/| *#$ISSUE_NUM\b/s/| \[ \] |/| [x] |/g" "$CHECKLIST_PATH"
           fi
 
           # 변경 확인
@@ -277,8 +285,14 @@ jobs:
         run: |
           RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.list" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "list_id=$SLACK_LIST_ID")
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "{\"list_id\": \"$SLACK_LIST_ID\"}")
+
+          # 에러 처리
+          if [ "$(echo "$RESPONSE" | jq -r '.ok')" != "true" ]; then
+            echo "::error::Slack API Error: $(echo "$RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
 
           # 문서에서 파싱한 Repository가 있으면 사용, 없으면 github.repository에서 추출
           DOC_REPO="${{ steps.parse_doc.outputs.doc_repo }}"
@@ -288,10 +302,10 @@ jobs:
             REPO_NAME="${{ steps.extract_ids.outputs.repo_name }}"
           fi
 
-          # 제목 Column (Col0A4WG2LPHA)에서 레포 이름으로 검색
-          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg repo "$REPO_NAME" \
+          # 제목 Column에서 레포 이름으로 검색
+          ITEM_ID=$(echo "$RESPONSE" | jq -r --arg repo "$REPO_NAME" --arg col "$COL_TITLE" \
             '.items[] | select(
-              .fields[] | select(.column_id == "Col0A4WG2LPHA") | .text == $repo
+              .fields[] | select(.column_id == $col) | .text == $repo
             ) | .id' | head -1)
 
           echo "item_id=$ITEM_ID" >> $GITHUB_OUTPUT
@@ -317,20 +331,24 @@ jobs:
               }
             }")
 
-          echo "API Response: $RESPONSE"
+          # 에러 처리
+          if [ "$(echo "$RESPONSE" | jq -r '.ok')" != "true" ]; then
+            echo "::error::Failed to create item: $(echo "$RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
 
           NEW_ITEM_ID=$(echo "$RESPONSE" | jq -r '.item.id // empty')
 
           # 제목 Column에 레포 이름 설정
           if [ -n "$NEW_ITEM_ID" ]; then
-            curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+            UPDATE_RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.update" \
               -H "Authorization: Bearer $SLACK_USER_TOKEN" \
               -H "Content-Type: application/json; charset=utf-8" \
               -d "{
                 \"list_id\": \"$SLACK_LIST_ID\",
                 \"cells\": [{
                   \"row_id\": \"$NEW_ITEM_ID\",
-                  \"column_id\": \"Col0A4WG2LPHA\",
+                  \"column_id\": \"$COL_TITLE\",
                   \"rich_text\": [{
                     \"type\": \"rich_text\",
                     \"elements\": [{
@@ -342,7 +360,11 @@ jobs:
                     }]
                   }]
                 }]
-              }"
+              }")
+
+            if [ "$(echo "$UPDATE_RESPONSE" | jq -r '.ok')" != "true" ]; then
+              echo "::warning::Item created but title update failed: $(echo "$UPDATE_RESPONSE" | jq -r '.error')"
+            fi
           fi
 
           echo "item_id=$NEW_ITEM_ID" >> $GITHUB_OUTPUT
@@ -447,7 +469,7 @@ jobs:
           CURRENT_DATE="${{ steps.current_date.outputs.date }}"
 
           # 진행률(프로그레스 바) + 비고(진행중 항목) + 마지막 업데이트 업데이트
-          curl -s -X POST "https://slack.com/api/slackLists.items.update" \
+          UPDATE_RESPONSE=$(curl -s -X POST "https://slack.com/api/slackLists.items.update" \
             -H "Authorization: Bearer $SLACK_USER_TOKEN" \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "{
@@ -455,7 +477,7 @@ jobs:
               \"cells\": [
                 {
                   \"row_id\": \"$ITEM_ID\",
-                  \"column_id\": \"Col0A55RYJHEV\",
+                  \"column_id\": \"$COL_PROGRESS\",
                   \"rich_text\": [{
                     \"type\": \"rich_text\",
                     \"elements\": [{
@@ -469,7 +491,7 @@ jobs:
                 },
                 {
                   \"row_id\": \"$ITEM_ID\",
-                  \"column_id\": \"Col0A4WG5SFD2\",
+                  \"column_id\": \"$COL_NOTES\",
                   \"rich_text\": [{
                     \"type\": \"rich_text\",
                     \"elements\": [{
@@ -483,8 +505,16 @@ jobs:
                 },
                 {
                   \"row_id\": \"$ITEM_ID\",
-                  \"column_id\": \"Col0A4ZL4THPU\",
+                  \"column_id\": \"$COL_DATE\",
                   \"date\": [\"$CURRENT_DATE\"]
                 }
               ]
-            }"
+            }")
+
+          # 에러 처리
+          if [ "$(echo "$UPDATE_RESPONSE" | jq -r '.ok')" != "true" ]; then
+            echo "::error::Failed to update Slack List: $(echo "$UPDATE_RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
+
+          echo "Successfully updated Slack List item: $ITEM_ID"
