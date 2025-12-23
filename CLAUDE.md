@@ -13,13 +13,14 @@ PR Merge → GitHub Actions → Slack Lists API → List 업데이트
            (Checklist 파싱)  (items.create/update)
                 ↓
          ┌─────────────────────────────────────┐
-         │ 진행률: ████░░░░░░ 60% (3/5)        │
+         │ #: 6                                │
+         │ 진행률: 🟢 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ 60%  │
          │ 비고: 🔄 진행중: • 문서 업데이트     │
          │ 마지막 업데이트: 2025-12-23         │
          └─────────────────────────────────────┘
 ```
 
-**워크플로우 단계** (v1.2):
+**워크플로우 단계** (v1.3):
 1. `pull_request.closed` + `merged == true` 트리거
 2. PR 제목/브랜치명에서 PRD ID 및 Issue 번호 추출
 3. **Checklist 문서 탐색** (`docs/checklists/PRD-NNNN.md` 등)
@@ -57,16 +58,24 @@ powershell tests/check_list_structure.ps1
 | `SLACK_USER_TOKEN` | User 토큰 (`xoxp-...`) - Bot 토큰은 Lists API 접근 불가 |
 | `SLACK_LIST_ID` | List ID (`F...`) |
 
-## Column ID (하드코딩됨)
+## Column ID (환경변수로 관리)
 
-| Column | ID | 타입 | 용도 |
-|--------|-----|------|------|
-| 제목 | `Col0A4WG2LPHA` | rich_text | 레포지토리 이름 (owner 생략) |
-| 진행률 | `Col0A55RYJHEV` | rich_text | 프로그레스 바: `████░░░░░░ 60%` |
-| 비고 | `Col0A4WG5SFD2` | rich_text | 진행중 항목 목록 |
-| 마지막 업데이트 | `Col0A4ZL4THPU` | date | 자동 갱신 날짜 (KST) |
+워크플로우의 `env` 섹션에서 중앙 관리:
 
-⚠️ 새 List 사용 시 `tests/check_list_structure.ps1`로 Column ID 확인 후 워크플로우 수정 필요
+| Column | ID | 환경변수 | 타입 | 용도 |
+|--------|-----|----------|------|------|
+| # | `Col0A4Q7FD095` | - | number | 순번 (수동 관리) |
+| 제목 | `Col0A4WG2LPHA` | `COL_TITLE` | rich_text | 레포지토리 이름 |
+| 진행률 | `Col0A55RYJHEV` | `COL_PROGRESS` | rich_text | 컬러 이모지 프로그레스 바 |
+| 비고 | `Col0A4WG5SFD2` | `COL_NOTES` | rich_text | 진행중 항목 목록 |
+| 마지막 업데이트 | `Col0A4ZL4THPU` | `COL_DATE` | date | 자동 갱신 날짜 (KST) |
+
+**프로그레스 바 스타일** (v1.3):
+- 🔴 🟥 (0-30%): 초기 단계
+- 🟡 🟨 (31-70%): 진행 중
+- 🟢 🟩 (71-100%): 거의 완료
+
+⚠️ 새 List 사용 시 `tests/check_list_structure.ps1`로 Column ID 확인 후 워크플로우 env 섹션 수정 필요
 
 ## PR 본문 Checklist 형식
 
